@@ -6,6 +6,7 @@
 
 # Python Standard Library
 import argparse
+import getpass
 import sys
 
 # 3rd party modules
@@ -158,7 +159,8 @@ class RuckusManagement(WAPManagement):
         print p.before
         p.sendline('exit')
 
-    def change_psk_passphrase(self, ap_name, interface, passphrase):
+    #def change_psk_passphrase(self, ap_name, interface, passphrase):
+    def change_psk_passphrase(self, ap_name, passphrase):
         """Change the PSK passphrase for a given WAP interface
 
         rkscli: set encryption wlan8
@@ -176,6 +178,9 @@ class RuckusManagement(WAPManagement):
         OK
         """
 
+        print "WAP: {}".format(ap_name)
+        print "Password: {}".format(passphrase)
+
         # WPA2
         wpa_protocol='2'
         # OPEN (PSK)
@@ -190,6 +195,7 @@ class RuckusManagement(WAPManagement):
         )
 
         # This will fail since expect will match the question as well as the prompt:
+        """
         p.expect('rkscli: ')
         p.sendline('get encryption wlan8')
         p.expect('Wireless Encryption Type: ')
@@ -202,6 +208,7 @@ class RuckusManagement(WAPManagement):
         p.sendline('3')  # AUTO
         p.expect('Enter A New PassPhrase [8-63 letters], or Press "Enter" to Accept : ')
         p.sendline("MoonshineSolosCreation'sBrushwood")
+        """
 
 
 class InitSetup(object):
@@ -291,12 +298,16 @@ The supported commands are:
             self.args.hosts = self.apc.list_wap_hosts()
 
 
-def loop_over_waps(command):
+def loop_over_waps(*args):
+
     def wap_loop(self):
         for wap in self.apc.list_wap_hosts():
             if wap in options.hosts:
                 print "{0}:".format(wap)
-                command(self, wap)
+                if wap_loop.__name__ == '__change_guest_password':
+                    args[0](self, wap, self.password)
+                else:
+                    args[0](self, wap)
     return wap_loop
 
 
@@ -307,6 +318,7 @@ class Controller(object):
         self.options = options
         self.apc = apc
         self.rm = rm
+        self.password = None
 
     @loop_over_waps
     def __get_logs(self, wap):
@@ -318,7 +330,7 @@ class Controller(object):
 
     @loop_over_waps
     def __change_guest_password(self, wap):
-        rm.change_psk_passphrase(wap)
+        rm.change_psk_passphrase(wap, self.password)
 
     def issue_command(self):
         """Run the command from the class self.options"""
@@ -328,8 +340,13 @@ class Controller(object):
         elif options.command == 'ssid':
             self.__get_ssid_interfaces()
         elif options.command == 'guestpasswd':
-            print "Please enter a new guest password:"
-            # ...
+            self.password = getpass.getpass(
+                prompt="Please enter a new guest password: "
+            )
+            if self.password != getpass.getpass(
+                    prompt="Please re-enter the guest password: "
+            ):
+                print "Password mismatch! Aborting."
             self.__change_guest_password()
         else:
             sys.stderr.write("Unavailable option requested.\n")
