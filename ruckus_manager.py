@@ -6,9 +6,7 @@
 
 # Python Standard Library
 import argparse
-import pprint
 import sys
-import textwrap
 
 # 3rd party modules
 try:
