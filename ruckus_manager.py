@@ -141,7 +141,7 @@ class RuckusManagement(WAPManagement):
 
         return p
 
-    def get_ssid_interfaces(self, ap_name, status='up'):
+    def get_ssid_interfaces(self, ap_name, status='up', ssid_filter=None):
         """Print configured SSIDs"""
         p = self.__get_pexpect_spawn(ap_name)
         result = {}
@@ -156,11 +156,12 @@ class RuckusManagement(WAPManagement):
                 len(line_list) == 7 and line_list[1] == status and
                 line_list[6] != '00:00:00:00:00:00'
             ):
-                result[line_list[3]] = {
-                    'radioID': line_list[4],
-                    'bssid': line_list[5],
-                    'ssid': line_list[6]
-                }
+                if not ssid_filter or re.match(ssid_filter, line_list[6]):
+                    result[line_list[3]] = {
+                        'radioID': line_list[4],
+                        'bssid': line_list[5],
+                        'ssid': line_list[6]
+                    }
 
         p.sendline('exit')
         return result
@@ -177,8 +178,7 @@ class RuckusManagement(WAPManagement):
         p.sendline('exit')
         return result
 
-    #def change_psk_passphrase(self, ap_name, interface, passphrase):
-    def change_psk_passphrase(self, ap_name, passphrase):
+    def change_psk_passphrase(self, ap_name, interface, passphrase):
         """Change the PSK passphrase for a given WAP interface
 
         rkscli: set encryption wlan8
@@ -361,8 +361,11 @@ class Controller(object):
         )
 
     @loop_over_waps
-    def __get_ssid_interfaces(self, wap):
-        ssid = rm.get_ssid_interfaces(wap, status='up')
+    def __get_ssid_interfaces(self, wap, ssid_filter=None):
+
+        ssid = rm.get_ssid_interfaces(
+            wap, status='up', ssid_filter=ssid_filter
+        )
         output = MarkdownFormatter.format_heading(wap)
 
         for wlanID, entry in sorted(
@@ -379,7 +382,13 @@ class Controller(object):
 
     @loop_over_waps
     def __change_guest_password(self, wap):
-        return rm.change_psk_passphrase(wap, self.password)
+        # get interface
+        results = self.__get_ssid_interfaces(
+            self, wap, '^sitepoint-guest$'
+        )
+        print results
+
+        #rm.change_psk_passphrase(wap, self.password)
 
     def __print_logs(self):
         print self.__get_logs()
