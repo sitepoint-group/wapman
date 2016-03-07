@@ -7,6 +7,8 @@
 # Python Standard Library
 import argparse
 import getpass
+import operator
+import re
 import sys
 
 # 3rd party modules
@@ -139,25 +141,41 @@ class RuckusManagement(WAPManagement):
 
         return p
 
-    def get_ssid_interfaces(self, ap_name):
+    def get_ssid_interfaces(self, ap_name, status='up'):
         """Print configured SSIDs"""
         p = self.__get_pexpect_spawn(ap_name)
-
+        result = {}
         p.expect('rkscli: ')
         p.sendline('get wlanlist')
         p.expect('rkscli: ')
-        print p.before
+        re_status = re.compile(r'^\w+\s+up\s+.*')
+
+        for line in [x.strip() for x in p.before.splitlines()]:
+            line_list = re.split('\s+', line)
+            if (
+                len(line_list) == 7 and line_list[1] == status and
+                line_list[6] != '00:00:00:00:00:00'
+            ):
+                result[line_list[3]] = {
+                    'radioID': line_list[4],
+                    'bssid': line_list[5],
+                    'ssid': line_list[6]
+                }
+
         p.sendline('exit')
+        return result
 
     def get_logs(self, ap_name):
         """Print WAP logs"""
         p = self.__get_pexpect_spawn(ap_name)
+        result = ""
 
         p.expect('rkscli: ')
         p.sendline('get syslog log')
         p.expect('rkscli: ')
-        print p.before
+        result += p.before
         p.sendline('exit')
+        return result
 
     #def change_psk_passphrase(self, ap_name, interface, passphrase):
     def change_psk_passphrase(self, ap_name, passphrase):
@@ -303,12 +321,27 @@ def loop_over_waps(*args):
     def wap_loop(self):
         for wap in self.apc.list_wap_hosts():
             if wap in options.hosts:
-                print "{0}:".format(wap)
                 if wap_loop.__name__ == '__change_guest_password':
-                    args[0](self, wap, self.password)
+                    return args[0](self, wap, self.password)
                 else:
-                    args[0](self, wap)
+                    return args[0](self, wap)
     return wap_loop
+
+
+class MarkdownFormatter(object):
+    """Basic Markdown-compatible string formatting"""
+
+    @staticmethod
+    def format_heading(heading, underscore_char='='):
+        formatted_heading = "{0}\n".format(heading)
+        for i in range(len(heading)):
+            formatted_heading += underscore_char
+        formatted_heading += "\n"
+        return formatted_heading
+
+    @staticmethod
+    def format_sub_heading(heading):
+        return MarkdownFormatter.format_heading(heading, '-')
 
 
 class Controller(object):
@@ -322,23 +355,45 @@ class Controller(object):
 
     @loop_over_waps
     def __get_logs(self, wap):
-        rm.get_logs(wap)
+        return "{0}{1}".format(
+            MarkdownFormatter.format_heading(wap),
+            rm.get_logs(wap)
+        )
 
     @loop_over_waps
     def __get_ssid_interfaces(self, wap):
-        rm.get_ssid_interfaces(wap)
+        ssid = rm.get_ssid_interfaces(wap, status='up')
+        output = MarkdownFormatter.format_heading(wap)
+
+        for wlanID, entry in sorted(
+            ssid.iteritems(),
+            key=operator.itemgetter(1)
+        ):
+            output += "{0}\t{1}\t{2}\t{3}\n".format(
+                entry['ssid'],
+                wlanID,
+                entry['radioID'],
+                entry['bssid']
+            )
+        return output
 
     @loop_over_waps
     def __change_guest_password(self, wap):
-        rm.change_psk_passphrase(wap, self.password)
+        return rm.change_psk_passphrase(wap, self.password)
+
+    def __print_logs(self):
+        print self.__get_logs()
+
+    def __print_ssid_interfaces(self):
+        print self.__get_ssid_interfaces()
 
     def issue_command(self):
         """Run the command from the class self.options"""
 
         if options.command == 'logs':
-            self.__get_logs()
+            self.__print_logs()
         elif options.command == 'ssid':
-            self.__get_ssid_interfaces()
+            self.__print_ssid_interfaces()
         elif options.command == 'guestpasswd':
             self.password = getpass.getpass(
                 prompt="Please enter a new guest password: "
@@ -353,6 +408,7 @@ class Controller(object):
             sys.exit(1)
 
 
+m = MarkdownFormatter()
 setup = InitSetup()
 options = setup.parse_args()
 apc = setup.import_config(options.config)
