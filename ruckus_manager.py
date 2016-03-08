@@ -253,6 +253,31 @@ class InitSetup(object):
     def __init__(self):
         self.apc = None
         self.args = None
+        self.valid_commands = ['logs', 'passwd', 'ssid']
+
+    def command_string(self, argument):
+        """Accept partial but unique command arguments"""
+        matches = []
+        for command in self.valid_commands:
+            if re.match(r'^{}'.format(argument), command):
+                matches.append(command)
+
+        if len(matches) > 1:
+            sys.stderr.write(
+                "Error: Ambiguous command!\n\nMultiple matches found:\n"
+            )
+            for match in matches:
+                sys.stderr.write(" {}\n".format(match))
+            sys.exit(1)
+        elif not matches:
+            sys.stderr.write(
+                "Error: Invalid command!\n\nCommand options include:\n"
+            )
+            for command in self.valid_commands:
+                sys.stderr.write(" {}\n".format(command))
+            sys.exit(1)
+        else:
+            return matches[0]
 
     def parse_args(self):
         """Parse command line options"""
@@ -261,9 +286,9 @@ class InitSetup(object):
         Ruckus WAP manager
 
         The supported commands are:
-         passwd       Change an SSID password (short-cut alias: "p")
-         logs         Print the logs (short-cut alias: "l")
-         ssid         Print the configured SSIDs (short-cut alias: "s")
+         logs         Print the logs
+         passwd       Change an SSID password
+         ssid         Print the configured SSIDs
         """
         parser = argparse.ArgumentParser(
             description=dedent(description),
@@ -285,7 +310,7 @@ class InitSetup(object):
         )
         parser.add_argument(
             'command',
-            choices=['logs', 'ssid', 'passwd'],
+            type=self.command_string,
             help=('Command to run'),
             metavar='COMMAND'
         )
