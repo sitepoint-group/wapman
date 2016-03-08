@@ -528,9 +528,13 @@ class Controller(object):
             sys.exit(1)
 
 
-setup = InitSetup()
-options = setup.parse_args()
-apc = setup.import_config(options.config)
-rm = RuckusSSHManagement(apc)
-controller = Controller(options, apc, rm)
-controller.issue_command()
+if __name__ == "__main__":
+    try:
+        setup = InitSetup()
+        options = setup.parse_args()
+        apc = setup.import_config(options.config)
+        rm = RuckusSSHManagement(apc)
+        controller = Controller(options, apc, rm)
+        controller.issue_command()
+    except KeyboardInterrupt:
+        sys.exit(1)
