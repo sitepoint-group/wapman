@@ -241,10 +241,14 @@ class RuckusSSHManagement(WAPManagement):
         #    p.before.splitlines()[-1])
         #)
         p.sendline(passphrase)
-        p.expect('WPA no error')
+        i = p.expect(['WPA no error', pexpect.EOF])
         p.expect('OK')
         p.expect('rkscli: ')
         p.sendline('exit')
+
+        if i != 0:
+            return False
+        return True
 
 
 class InitSetup(object):
@@ -405,6 +409,10 @@ class Controller(object):
         self.ssid = None
         self.password = None
 
+        # Basic stats tracking
+        self.password_updates = 0
+        self.wap_updates = 0
+
     @loop_over_waps
     def __get_logs(self, wap):
         """Return formatted logs as a string for a given WAP"""
@@ -435,13 +443,17 @@ class Controller(object):
 
     @loop_over_waps
     def __change_ssid_password(self, wap):
-        # get interface
+        old_updates = self.password_updates
         iface_configs = rm.get_ssid_interfaces(
             wap, status='up', ssid_filter=r'^{}$'.format(self.ssid)
         )
         for interface in iface_configs.keys():
-            print "Updating password on %s, %s..." % (wap, interface)
-            rm.change_psk_passphrase(wap, interface, self.password)
+            print "Updating %s (%s)..." % (wap, interface)
+            if rm.change_psk_passphrase(wap, interface, self.password):
+                self.password_updates += 1
+        # Check any password updates were actually performed.
+        if old_updates < self.password_updates:
+            self.wap_updates += 1
 
     def __print_logs(self):
         """Get formatted logs and print them."""
@@ -482,6 +494,15 @@ class Controller(object):
             """
         ).lstrip())
 
+    def __print_stats(self):
+        # Only print a separator if other we have results.
+        if self.password_updates:
+            print "\n---"
+        print "Password updated on {} WAPs.".format(self.wap_updates)
+        print "Password updated on {} interfaces.".format(
+            self.password_updates
+        )
+
     def issue_command(self):
         """Run the command from the class self.options"""
 
@@ -501,6 +522,7 @@ class Controller(object):
                 else:
                     self.__prompt_user_for_password()
             self.__change_ssid_password()
+            self.__print_stats()
         else:
             sys.stderr.write("Unavailable option requested.\n")
             sys.exit(1)
