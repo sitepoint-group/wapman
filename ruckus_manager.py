@@ -166,15 +166,38 @@ class RuckusSSHManagement(WAPManagement):
 
         for line in [x.strip() for x in p.before.splitlines()]:
             line_list = re.split('\s+', line)
+            # Version 9.8.* output of "get wlanlist" looks like:
+            # svcp up AP wlan0 0 e0:10:7f:3e:7a:98 sitepoint-guest
             if (
                 len(line_list) == 7 and line_list[1] == status and
-                line_list[6] != '00:00:00:00:00:00'
+                line_list[5] != '00:00:00:00:00:00'
             ):
                 if not ssid_filter or re.match(ssid_filter, line_list[6]):
                     result[line_list[3]] = {
                         'radioID': line_list[4],
                         'bssid': line_list[5],
                         'ssid': line_list[6]
+                    }
+            # Older firmware didn't print the last ssid column. This
+            # section adds backwards compatibility for pre-9.8.*
+            # firmware, but is slower than the above due to the extra
+            # command required.
+            elif (
+                len(line_list) == 6 and line_list[1] == status and
+                line_list[5] != '00:00:00:00:00:00'
+            ):
+                p.sendline('get ssid {}'.format(line_list[3]))
+                p.expect('OK')
+                ssid = re.split(
+                    '\s+', p.before.splitlines()[-1].strip()
+                )[-1]
+                p.expect('rkscli:')
+
+                if not ssid_filter or re.match(ssid_filter, ssid):
+                    result[line_list[3]] = {
+                        'radioID': line_list[4],
+                        'bssid': line_list[5],
+                        'ssid': ssid
                     }
 
         p.sendline('exit')
@@ -214,9 +237,9 @@ class RuckusSSHManagement(WAPManagement):
             'Enter A New PassPhrase [8-63 letters], or ' + \
             'Press "Enter" to Accept : '
         )
-        sys.stdout.write("Replacing old {}\n".format(
-            p.before.splitlines()[-1])
-        )
+        #sys.stdout.write("Replacing old {}\n".format(
+        #    p.before.splitlines()[-1])
+        #)
         p.sendline(passphrase)
         p.expect('WPA no error')
         p.expect('OK')
@@ -321,9 +344,11 @@ class InitSetup(object):
 
 def loop_over_waps(f):
     def wap_loop(self, *args, **kwargs):
+        results = {}
         for wap in self.apc.list_wap_hosts():
             if wap in options.hosts:
-                return f(self, wap, *args, **kwargs)
+                results[wap] = f(self, wap, *args, **kwargs)
+        return results
     return wap_loop
 
 
@@ -394,11 +419,13 @@ class Controller(object):
 
     def __print_logs(self):
         """Get formatted logs and print them."""
-        print self.__get_logs()
+        for wap_log in self.__get_logs().values():
+            print wap_log
 
     def __print_ssid_interfaces(self):
         """Get SSID interfaces and print them."""
-        print self.__get_ssid_interfaces()
+        for value in self.__get_ssid_interfaces().values():
+            print value
 
     def __prompt_user_for_password(self):
         self.password = getpass.getpass(
@@ -434,7 +461,6 @@ class Controller(object):
             sys.exit(1)
 
 
-m = MarkdownFormatter()
 setup = InitSetup()
 options = setup.parse_args()
 apc = setup.import_config(options.config)
