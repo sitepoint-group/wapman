@@ -196,9 +196,6 @@ class RuckusManagement(WAPManagement):
         OK
         """
 
-        print "WAP: {}".format(ap_name)
-        print "Password: {}".format(passphrase)
-
         # WPA2
         wpa_protocol='2'
         # OPEN (PSK)
@@ -206,16 +203,10 @@ class RuckusManagement(WAPManagement):
         # AUTO
         wpa_cipher='3'
 
-        p = self.__get_pexpect_spawn(
-            self.__get_login_credentials(
-                ap_name
-            )
-        )
+        p = self.__get_pexpect_spawn(ap_name)
 
-        # This will fail since expect will match the question as well as the prompt:
-        """
         p.expect('rkscli: ')
-        p.sendline('get encryption wlan8')
+        p.sendline('set encryption %s' % interface)
         p.expect('Wireless Encryption Type: ')
         p.sendline('3')
         p.expect('WPA Protocol Version: ')
@@ -224,9 +215,13 @@ class RuckusManagement(WAPManagement):
         p.sendline('1')  # OPEN (PSK)
         p.expect('WPA Cipher Type: ')
         p.sendline('3')  # AUTO
-        p.expect('Enter A New PassPhrase [8-63 letters], or Press "Enter" to Accept : ')
-        p.sendline("MoonshineSolosCreation'sBrushwood")
-        """
+        p.expect_exact('Enter A New PassPhrase [8-63 letters], or Press "Enter" to Accept : ')
+        sys.stdout.write("Replacing old {}\n".format(p.before.splitlines()[-1]))
+        p.sendline(passphrase)
+        p.expect('WPA no error')
+        p.expect('OK')
+        p.expect('rkscli: ')
+        p.sendline('exit')
 
 
 class InitSetup(object):
@@ -316,15 +311,11 @@ The supported commands are:
             self.args.hosts = self.apc.list_wap_hosts()
 
 
-def loop_over_waps(*args):
-
-    def wap_loop(self):
+def loop_over_waps(f):
+    def wap_loop(self, *args, **kwargs):
         for wap in self.apc.list_wap_hosts():
             if wap in options.hosts:
-                if wap_loop.__name__ == '__change_guest_password':
-                    return args[0](self, wap, self.password)
-                else:
-                    return args[0](self, wap)
+                return f(self, wap, *args, **kwargs)
     return wap_loop
 
 
@@ -383,12 +374,12 @@ class Controller(object):
     @loop_over_waps
     def __change_guest_password(self, wap):
         # get interface
-        results = self.__get_ssid_interfaces(
-            self, wap, '^sitepoint-guest$'
+        iface_configs = rm.get_ssid_interfaces(
+            wap, status='up', ssid_filter='^sitepoint-guest$'
         )
-        print results
-
-        #rm.change_psk_passphrase(wap, self.password)
+        for interface in iface_configs.keys():
+            print "Updating password on %s, %s..." % (wap, interface)
+            rm.change_psk_passphrase(wap, interface, self.password)
 
     def __print_logs(self):
         print self.__get_logs()
@@ -411,7 +402,10 @@ class Controller(object):
                     prompt="Please re-enter the guest password: "
             ):
                 print "Password mismatch! Aborting."
-            self.__change_guest_password()
+            elif not self.password:
+                print "You must enter a password. Aborting."
+            else:
+                self.__change_guest_password()
         else:
             sys.stderr.write("Unavailable option requested.\n")
             sys.exit(1)
