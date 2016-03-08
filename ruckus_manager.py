@@ -266,6 +266,11 @@ class InitSetup(object):
             help=('Command to run'),
             metavar='COMMAND'
         )
+        parser.add_argument(
+            'remainder',
+            nargs=argparse.REMAINDER,
+            help=argparse.SUPPRESS
+        )
 
         self.args = parser.parse_args()
 
@@ -395,6 +400,21 @@ class Controller(object):
         """Get SSID interfaces and print them."""
         print self.__get_ssid_interfaces()
 
+    def __prompt_user_for_password(self):
+        self.password = getpass.getpass(
+            prompt="Please enter a new guest password: "
+        )
+        if self.password != getpass.getpass(
+                prompt="Please re-enter the guest password: "
+        ):
+            print "Password mismatch! Aborting."
+        elif not self.password:
+            print "You must enter a password. Aborting."
+        if not self.password:
+            return False
+        else:
+            return self.password
+
     def issue_command(self):
         """Run the command from the class self.options"""
 
@@ -403,17 +423,12 @@ class Controller(object):
         elif options.command == 'ssid':
             self.__print_ssid_interfaces()
         elif options.command == 'guestpasswd':
-            self.password = getpass.getpass(
-                prompt="Please enter a new guest password: "
-            )
-            if self.password != getpass.getpass(
-                    prompt="Please re-enter the guest password: "
-            ):
-                print "Password mismatch! Aborting."
-            elif not self.password:
-                print "You must enter a password. Aborting."
-            else:
-                self.__change_guest_password()
+            if not self.password:
+                if self.options.remainder:
+                    self.password = self.options.remainder[0]
+                else:
+                    self.__prompt_user_for_password()
+            self.__change_guest_password()
         else:
             sys.stderr.write("Unavailable option requested.\n")
             sys.exit(1)
