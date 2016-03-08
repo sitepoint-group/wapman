@@ -429,15 +429,20 @@ class Controller(object):
             print value
 
     def __prompt_user_for_password(self):
-        self.password = getpass.getpass(
-            prompt="Please enter a new guest password: "
-        )
-        if self.password != getpass.getpass(
-                prompt="Please re-enter the guest password: "
-        ):
-            print "Password mismatch! Aborting."
-        elif not self.password:
-            print "You must enter a password. Aborting."
+        try:
+            self.password = getpass.getpass(
+                prompt="Please enter a new {} password: ".format(self.ssid)
+            )
+            if self.password != getpass.getpass(
+                prompt="Please re-enter the {} password: ".format(self.ssid)
+            ):
+                print "Password mismatch! Aborting."
+            elif not self.password:
+                print "You must enter a password. Aborting."
+        except KeyboardInterrupt:
+            sys.stderr.write("\nAborting.\n")
+            sys.exit(1)
+
         if not self.password:
             return False
         else:
