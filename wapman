@@ -287,7 +287,7 @@ class InitSetup(object):
         """Parse command line options"""
 
         description = """
-        Ruckus WAP manager
+        WAP Manager
 
         The supported commands are:
          logs         Print the logs
@@ -308,7 +308,7 @@ class InitSetup(object):
         )
         parser.add_argument(
             '-c', '--config',
-            default='access_points.yml',
+            default='wapman.yml',
             help='YAML configuration file defining access point\n' + \
                 'credentials (default: %(default)s)'
         )
