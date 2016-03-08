@@ -37,7 +37,6 @@ class AccessPointConnections(object):
 
     def __init__(self, yaml_data):
         """Define access point credentials here"""
-
         yaml_as_dict = yaml.load(yaml_data)
         append_device_settings = {}
 
@@ -59,28 +58,39 @@ class AccessPointConnections(object):
             self.access_points[wap].update(append_device_settings)
 
     def list_wap_hosts(self):
+        """Return a list of all known access points."""
         return self.access_points.keys()
 
     def get_connection_settings(self, ap_name):
+        """Return a dictionary containing defined settings for one WAP"""
         return self.access_points.get(ap_name, None)
 
 
 class WAPManagement(object):
+    """Base class listing all generic WAP functions to be overridden"""
 
     def __init__(self):
         pass
 
-    def get_ssid_interface(self):
+    def get_ssid_interface(self, ap_name, status='up', ssid_filter=None):
+        pass
+
+    def get_logs(self, ap_name):
+        pass
+
+    def change_psk_passphrase(self, ap_name, interface, passphrase):
         pass
 
 
-class RuckusManagement(WAPManagement):
+class RuckusSSHManagement(WAPManagement):
+    """Support for Ruckus WAP management using SSH"""
 
     def __init__(self, apc):
         """Takes an instance of AccessPointConnections()"""
         self.apc = apc
 
     def __do_ssh_login(self, ap_name, cs):
+        """Establish an SSH session to the WAP"""
         try:
             ip = cs.get('ip')
             fingerprint = cs['protocol']['ssh']['fingerprint']
@@ -110,6 +120,7 @@ class RuckusManagement(WAPManagement):
         return p
 
     def __get_login_credentials(self, ap_name):
+        """Return management credentials"""
         cs = self.apc.get_connection_settings(ap_name)
         try:
             username = cs['username']
@@ -129,6 +140,7 @@ class RuckusManagement(WAPManagement):
         return (username, password, protocol)
 
     def __get_pexpect_spawn(self, ap_name):
+        """Verify SSH is available, and spawn a session"""
         cs = self.apc.get_connection_settings(ap_name)
 
         if 'ssh' in cs.get('protocol'):
@@ -193,11 +205,11 @@ class RuckusManagement(WAPManagement):
         p.expect('Wireless Encryption Type: ')
         p.sendline('3')
         p.expect('WPA Protocol Version: ')
-        p.sendline('2')
+        p.sendline(wpa_protocol)
         p.expect('WPA Authentication Type: ')
-        p.sendline('1')  # OPEN (PSK)
+        p.sendline(wpa_auth)
         p.expect('WPA Cipher Type: ')
-        p.sendline('3')  # AUTO
+        p.sendline(wpa_cipher)
         p.expect_exact(
             'Enter A New PassPhrase [8-63 letters], or ' + \
             'Press "Enter" to Accept : '
@@ -213,6 +225,7 @@ class RuckusManagement(WAPManagement):
 
 
 class InitSetup(object):
+    """Arguments and settings handler"""
 
     def __init__(self):
         self.apc = None
@@ -314,6 +327,7 @@ class MarkdownFormatter(object):
 
     @staticmethod
     def format_heading(heading, underscore_char='='):
+        """Format string as a Markdown heading"""
         formatted_heading = "{0}\n".format(heading)
         for i in range(len(heading)):
             formatted_heading += underscore_char
@@ -322,6 +336,7 @@ class MarkdownFormatter(object):
 
     @staticmethod
     def format_sub_heading(heading):
+        """Format string as a Markdown sub-heading"""
         return MarkdownFormatter.format_heading(heading, '-')
 
 
@@ -336,6 +351,7 @@ class Controller(object):
 
     @loop_over_waps
     def __get_logs(self, wap):
+        """Return formatted logs as a string for a given WAP"""
         return "{0}{1}".format(
             MarkdownFormatter.format_heading(wap),
             rm.get_logs(wap)
@@ -372,9 +388,11 @@ class Controller(object):
             rm.change_psk_passphrase(wap, interface, self.password)
 
     def __print_logs(self):
+        """Get formatted logs and print them."""
         print self.__get_logs()
 
     def __print_ssid_interfaces(self):
+        """Get SSID interfaces and print them."""
         print self.__get_ssid_interfaces()
 
     def issue_command(self):
@@ -405,6 +423,6 @@ m = MarkdownFormatter()
 setup = InitSetup()
 options = setup.parse_args()
 apc = setup.import_config(options.config)
-rm = RuckusManagement(apc)
+rm = RuckusSSHManagement(apc)
 controller = Controller(options, apc, rm)
 controller.issue_command()
