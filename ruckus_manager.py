@@ -10,6 +10,7 @@ import getpass
 import operator
 import re
 import sys
+from textwrap import dedent
 
 # 3rd party modules
 try:
@@ -87,8 +88,9 @@ class RuckusManagement(WAPManagement):
             sys.stderr.write('Missing required connection data.\n')
             sys.exit(1)
 
-        username, password, protocol = self.__get_login_credentials(ap_name)
-
+        username, password, protocol = self.__get_login_credentials(
+            ap_name
+        )
         new_ssh = " fingerprint is {0}.\r\n".format(fingerprint) + \
             "Are you sure you want to continue connecting (yes/no)?"
         p = pexpect.spawn('ssh', args=[ip], timeout=2)
@@ -179,30 +181,11 @@ class RuckusManagement(WAPManagement):
         return result
 
     def change_psk_passphrase(self, ap_name, interface, passphrase):
-        """Change the PSK passphrase for a given WAP interface
+        """Change the PSK passphrase for a given WAP interface"""
 
-        rkscli: set encryption wlan8
-        Wireless Encryption Type: [0] quit, [1] OPEN, [2] WEP, or [3] WPA
-        Wireless Encryption Type:  3
-        WPA Protocol Version: [0] quit, [1] WPA, [2] WPA2, or [3] AUTO
-        Wpa Protocol Version: 2
-        WPA Authentication Type: [0] quit, [1] OPEN (PSK), [2] EAP (.1X), or [3] AUTO
-        WPA Authentication Type:  1
-        WPA Cipher Type: [0] quit, [1] TKIP, [2] AES-CCMP, or [3] AUTO
-        WPA Cipher Type:  3
-        WPA PassPhrase: "SomePassword"
-        Enter A New PassPhrase [8-63 letters], or Press "Enter" to Accept : SomeOtherPassword
-        WPA no error
-        OK
-        """
-
-        # WPA2
-        wpa_protocol='2'
-        # OPEN (PSK)
-        wpa_auth='1'
-        # AUTO
-        wpa_cipher='3'
-
+        wpa_protocol='2' # WPA2
+        wpa_auth='1'     # OPEN (PSK)
+        wpa_cipher='3'   # AUTO
         p = self.__get_pexpect_spawn(ap_name)
 
         p.expect('rkscli: ')
@@ -215,8 +198,13 @@ class RuckusManagement(WAPManagement):
         p.sendline('1')  # OPEN (PSK)
         p.expect('WPA Cipher Type: ')
         p.sendline('3')  # AUTO
-        p.expect_exact('Enter A New PassPhrase [8-63 letters], or Press "Enter" to Accept : ')
-        sys.stdout.write("Replacing old {}\n".format(p.before.splitlines()[-1]))
+        p.expect_exact(
+            'Enter A New PassPhrase [8-63 letters], or ' + \
+            'Press "Enter" to Accept : '
+        )
+        sys.stdout.write("Replacing old {}\n".format(
+            p.before.splitlines()[-1])
+        )
         p.sendline(passphrase)
         p.expect('WPA no error')
         p.expect('OK')
@@ -233,14 +221,16 @@ class InitSetup(object):
     def parse_args(self):
         """Parse command line options"""
 
-        parser = argparse.ArgumentParser(
-            description="""Ruckus WAP manager
+        description = """
+        Ruckus WAP manager
 
-The supported commands are:
- guestpasswd  Change the guest password (short-cut alias: "g")
- logs         Print the logs (short-cut alias: "l")
- ssid         Print the configured SSIDs (short-cut alias: "s")
-""",
+        The supported commands are:
+         guestpasswd  Change the guest password (short-cut alias: "g")
+         logs         Print the logs (short-cut alias: "l")
+         ssid         Print the configured SSIDs (short-cut alias: "s")
+        """
+        parser = argparse.ArgumentParser(
+            description=dedent(description),
             formatter_class=argparse.RawTextHelpFormatter
 
         )
