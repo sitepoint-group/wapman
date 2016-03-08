@@ -261,7 +261,7 @@ class InitSetup(object):
         Ruckus WAP manager
 
         The supported commands are:
-         guestpasswd  Change the guest password (short-cut alias: "g")
+         passwd       Change an SSID password (short-cut alias: "p")
          logs         Print the logs (short-cut alias: "l")
          ssid         Print the configured SSIDs (short-cut alias: "s")
         """
@@ -285,7 +285,7 @@ class InitSetup(object):
         )
         parser.add_argument(
             'command',
-            choices=['logs', 'ssid', 'guestpasswd'],
+            choices=['logs', 'ssid', 'passwd'],
             help=('Command to run'),
             metavar='COMMAND'
         )
@@ -377,6 +377,7 @@ class Controller(object):
         self.options = options
         self.apc = apc
         self.rm = rm
+        self.ssid = None
         self.password = None
 
     @loop_over_waps
@@ -408,10 +409,10 @@ class Controller(object):
         return output
 
     @loop_over_waps
-    def __change_guest_password(self, wap):
+    def __change_ssid_password(self, wap):
         # get interface
         iface_configs = rm.get_ssid_interfaces(
-            wap, status='up', ssid_filter='^sitepoint-guest$'
+            wap, status='up', ssid_filter=r'^{}$'.format(self.ssid)
         )
         for interface in iface_configs.keys():
             print "Updating password on %s, %s..." % (wap, interface)
@@ -442,6 +443,15 @@ class Controller(object):
         else:
             return self.password
 
+    def __print_passwd_help(self):
+        sys.stderr.write(dedent(
+            """
+            passwd sub-arguments:
+             SSID             SSID name to reset
+             [PASSWORD]       Set PSK to this (default: user is prompted)
+            """
+        ).lstrip())
+
     def issue_command(self):
         """Run the command from the class self.options"""
 
@@ -449,13 +459,18 @@ class Controller(object):
             self.__print_logs()
         elif options.command == 'ssid':
             self.__print_ssid_interfaces()
-        elif options.command == 'guestpasswd':
+        elif options.command == 'passwd':
+            if not self.options.remainder:
+                self.__print_passwd_help()
+                sys.exit(1)
+            else:
+                self.ssid = self.options.remainder[0]
             if not self.password:
-                if self.options.remainder:
-                    self.password = self.options.remainder[0]
+                if len(self.options.remainder) == 2:
+                    self.password = self.options.remainder[1]
                 else:
                     self.__prompt_user_for_password()
-            self.__change_guest_password()
+            self.__change_ssid_password()
         else:
             sys.stderr.write("Unavailable option requested.\n")
             sys.exit(1)
