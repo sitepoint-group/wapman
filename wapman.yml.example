@@ -1,0 +1,21 @@
+# Define access point credentials here.
+
+access_points:
+  access_point_host.local:
+    ip: '10.1.2.3'
+    brand: ruckus
+    model: '7982'
+    username: someuser
+    password: "my_password"
+    protocol:
+      ssh:
+        fingerprint: 'de:ad:be:ef:ca:fe:de:ad:be:ef:ca:fe:de:ad:be:ef'
+  another_access_point_host.local:
+    ip: '10.1.2.4'
+    brand: ruckus
+    model: '7982'
+    username: someuser
+    password: "another_password"
+    protocol:
+      ssh:
+        fingerprint: 'ef:be:ad:de:fe:ca:ef:be:ad:de:fe:ca:ef:be:ad:de'
