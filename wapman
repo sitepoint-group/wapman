@@ -8,6 +8,7 @@
 import argparse
 import getpass
 import operator
+import os.path
 import re
 import sys
 from textwrap import dedent
@@ -95,16 +96,27 @@ class RuckusSSHManagement(WAPManagement):
             ip = cs.get('ip')
             fingerprint = cs['protocol']['ssh']['fingerprint']
         except KeyError:
-            sys.stderr.write('Missing required connection data.\n')
-            sys.exit(1)
+            sys.stderr.write(
+                "Missing required connection data for '{0}'.\n".format(
+                    ap_name
+                )
+            )
+            raise
 
         username, password, protocol = self.__get_login_credentials(
             ap_name
         )
         new_ssh = " fingerprint is {0}.\r\n".format(fingerprint) + \
             "Are you sure you want to continue connecting (yes/no)?"
-        p = pexpect.spawn('ssh', args=[ip], timeout=2)
-        i = p.expect([new_ssh, 'Please login: ', pexpect.EOF], timeout=2)
+        try:
+            p = pexpect.spawn('ssh', args=[ip], timeout=5)
+            i = p.expect([new_ssh, 'Please login: ', pexpect.EOF])
+        except pexpect.TIMEOUT:
+            sys.stderr.write("Connection timeout to '{0}'.\n".format(ip))
+            raise
+        except pexpect.ExceptionPexpect:
+            sys.stderr.write("Connection failure to '{0}'.\n".format(ip))
+            raise
 
         if i == 0:
             p.sendline('yes')
@@ -112,8 +124,10 @@ class RuckusSSHManagement(WAPManagement):
         if i == 1:
             p.sendline(username)
         if i == 2:
-            print "Connection failure to '{0}'.".format(ip)
-            sys.exit(1)
+            sys.stderr.write("Unknown failure to '{0}'.\n".format(ip))
+            raise pexpect.ExceptionPexpect(
+                "Unknown failure to '{0}'.".format(ip)
+            )
         p.expect('password : ')
         p.sendline(password)
 
@@ -308,7 +322,7 @@ class InitSetup(object):
         )
         parser.add_argument(
             '-c', '--config',
-            default='wapman.yml',
+            default='~/.config/wapman/default.yml',
             help='YAML configuration file defining access point\n' + \
                 'credentials (default: %(default)s)'
         )
@@ -338,7 +352,7 @@ class InitSetup(object):
         """Return YAML configuration file contents as dict"""
 
         try:
-            f = open(config, 'r')
+            f = open(os.path.expanduser(config), 'r')
             self.apc = AccessPointConnections(f.read())
             f.close()
         except IOError:
@@ -376,7 +390,11 @@ def loop_over_waps(f):
         results = {}
         for wap in self.apc.list_wap_hosts():
             if wap in options.hosts:
-                results[wap] = f(self, wap, *args, **kwargs)
+                try:
+                    results[wap] = f(self, wap, *args, **kwargs)
+                except pexpect.ExceptionPexpect:
+                    self.exit_status = 2
+                    pass
         return results
     return wap_loop
 
@@ -408,6 +426,7 @@ class Controller(object):
         self.rm = rm
         self.ssid = None
         self.password = None
+        self.exit_status = 0
 
         # Basic stats tracking
         self.password_updates = 0
@@ -538,3 +557,5 @@ if __name__ == "__main__":
         controller.issue_command()
     except KeyboardInterrupt:
         sys.exit(1)
+    else:
+        sys.exit(controller.exit_status)
