@@ -96,16 +96,27 @@ class RuckusSSHManagement(WAPManagement):
             ip = cs.get('ip')
             fingerprint = cs['protocol']['ssh']['fingerprint']
         except KeyError:
-            sys.stderr.write('Missing required connection data.\n')
-            sys.exit(1)
+            sys.stderr.write(
+                "Missing required connection data for '{0}'.\n".format(
+                    ap_name
+                )
+            )
+            raise
 
         username, password, protocol = self.__get_login_credentials(
             ap_name
         )
         new_ssh = " fingerprint is {0}.\r\n".format(fingerprint) + \
             "Are you sure you want to continue connecting (yes/no)?"
-        p = pexpect.spawn('ssh', args=[ip], timeout=2)
-        i = p.expect([new_ssh, 'Please login: ', pexpect.EOF], timeout=2)
+        try:
+            p = pexpect.spawn('ssh', args=[ip], timeout=5)
+            i = p.expect([new_ssh, 'Please login: ', pexpect.EOF])
+        except pexpect.TIMEOUT:
+            sys.stderr.write("Connection timeout to '{0}'.\n".format(ip))
+            raise
+        except pexpect.ExceptionPexpect:
+            sys.stderr.write("Connection failure to '{0}'.\n".format(ip))
+            raise
 
         if i == 0:
             p.sendline('yes')
@@ -113,8 +124,10 @@ class RuckusSSHManagement(WAPManagement):
         if i == 1:
             p.sendline(username)
         if i == 2:
-            print "Connection failure to '{0}'.".format(ip)
-            sys.exit(1)
+            sys.stderr.write("Unknown failure to '{0}'.\n".format(ip))
+            raise pexpect.ExceptionPexpect(
+                "Unknown failure to '{0}'.".format(ip)
+            )
         p.expect('password : ')
         p.sendline(password)
 
