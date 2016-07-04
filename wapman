@@ -8,6 +8,7 @@
 import argparse
 import getpass
 import operator
+import os.path
 import re
 import sys
 from textwrap import dedent
@@ -308,7 +309,7 @@ class InitSetup(object):
         )
         parser.add_argument(
             '-c', '--config',
-            default='wapman.yml',
+            default='~/.config/wapman/default.yml',
             help='YAML configuration file defining access point\n' + \
                 'credentials (default: %(default)s)'
         )
@@ -338,7 +339,7 @@ class InitSetup(object):
         """Return YAML configuration file contents as dict"""
 
         try:
-            f = open(config, 'r')
+            f = open(os.path.expanduser(config), 'r')
             self.apc = AccessPointConnections(f.read())
             f.close()
         except IOError:
